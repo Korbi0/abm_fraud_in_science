@@ -2,25 +2,53 @@ breed [research_areas research_area]
 research_areas-own [value] ; each research area consists of a question which has a definitive true value between 0 and 1 as its answer
 
 breed [researchers researcher]
-researchers-own [open_to_fraud fraud_propensity speciality reported_results node-clustering-coefficient]
+researchers-own [open_to_fraud fraud_propensity number_of_frauds_committed number_of_frauds_detected speciality reported_results node-clustering-coefficient]
 ; each researcher is either open to fraud or not (and if so has a certain propensity for fraud), has a specific research area (speciality)
 ; has a list of reported results (the results they published)
 
 
 
-globals[clustering-coefficient average-path-length infinity] ; taken from the code for  Kevin Zollman's paper Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
+globals[number_of_agents clustering-coefficient average-path-length infinity] ; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
 
 to setup
   clear-all
   ask patches [set pcolor white]
-  create-turtles number_of_agents
   reset-ticks
+
+  set number_of_agents (number_of_research_areas * researchers_per_area)
+  create-researchers number_of_agents
+
   create-research_areas number_of_research_areas
+
+  ask researchers [
+    set open_to_fraud (random-float 1) < share_of_fraudulent_scientists
+    set fraud_propensity random-float highest_possible_fraud_propensity
+    set number_of_frauds_committed 0
+    set number_of_frauds_detected 0
+    set reported_results []
+    set speciality 0
+  ]
+
+
+  ask research_areas [
+    ; set the true value of the question investigated in each research area
+    set value (random-float 1)
+
+    ; assign 'researchers_per_area' many researchers to each area
+    ask n-of researchers_per_area (researchers with [speciality = 0]) [
+      set speciality myself
+    ]
+  ]
+
+
+
+
 end
 
 to go
   ask researchers [
     report_research
+    fraud_detection
     update_credences
   ]
   tick
@@ -34,6 +62,7 @@ to report_research
     ifelse commits_fraud
     [
       set reported_results (lput 1 reported_results) ;if fraud is committed, the scientist reports a positive result independent of their experimental result
+      set number_of_frauds_committed (number_of_frauds_committed + 1)
     ]
     [
       set reported_results (lput experimental_result reported_results) ; if no fraud is committed, the researchers enters their true experimental result into the record
@@ -55,8 +84,32 @@ to-report form_binary_opinion [rep_results]
 end
 
 
-to update_credences
+to fraud_detection
+  ifelse number_of_frauds_committed [
+    ; if no frauds have been committed, do nothing
+  ]
+  [
+    ; the probability of a fraud being detected is modeled by a geometric distribution
+    let probability 1 - ((1 - risk_of_getting_caught)^(number_of_frauds_committed - number_of_frauds_detected))
+    if (random-float 1) < probability [
+      ; if a fraud is detected, increase the number of detected frauds by one
+      set number_of_frauds_detected (number_of_frauds_detected + 1)
 
+      ; If the fraud-related norm being used is the "Rigorous Eliminator", a fraud being detected leads to the fraudster being immediately excised from the community
+      if "Fraud_Related_Norm" = "Rigorous Eliminator" [die]
+    ]
+  ]
+
+end
+
+
+to update_credences
+  if Testimonial_Norm = "Reidian" [reidian_updating]
+  if Testimonial_Norm = "Majoritarian Reidian" [majoritarian_reidian_updating]
+  if Testimonial_Norm = "E-Truster" [e_trusting]
+  if Testimonial_Norm = "Majoritarian E-Truster" [majoritarian_e_trusting]
+  if Testimonial_Norm = "Proximist" [proximist]
+  if Testimonial_Norm = "Majoritarian Proximist" [majoritarian_proximist]
 end
 
 
@@ -76,13 +129,41 @@ to-report get_experimental_result [res_area]
 end
 
 
+to reidian_updating
+
+end
+
+to majoritarian_reidian_updating
+
+end
+
+to e_trusting
+
+end
+
+
+to majoritarian_e_trusting
+
+end
+
+
+
+to proximist
+
+end
+
+
+
+to majoritarian_proximist
+
+end
 
 
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; code for creating network structures
-; taken from the code for  Kevin Zollman's paper Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
+; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to link-n
@@ -240,10 +321,10 @@ to find-clustering-coefficient
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-440
-10
-877
-448
+834
+30
+1271
+468
 -1
 -1
 13.0
@@ -284,10 +365,10 @@ HORIZONTAL
 SLIDER
 70
 243
-242
+258
 276
-number_of_agents
-number_of_agents
+researchers_per_area
+researchers_per_area
 0
 100
 49.0
@@ -381,6 +462,86 @@ noise_in_experiments
 1
 NIL
 HORIZONTAL
+
+SLIDER
+70
+380
+346
+413
+highest_possible_fraud_propensity
+highest_possible_fraud_propensity
+0
+1
+0.3
+.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+70
+349
+352
+382
+share_of_fraudulent_scientists
+share_of_fraudulent_scientists
+0
+1
+0.3
+.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+71
+414
+317
+447
+risk_of_getting_caught
+risk_of_getting_caught
+0
+1
+0.1
+.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+71
+449
+263
+482
+fraud_discount_factor
+fraud_discount_factor
+0
+1
+0.5
+.05
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+315
+98
+537
+151
+\"Reidian\", \"Majoritarian Reidian\", \"E-Truster\", \"Majoritarian E-Truster\", \"Proximist\" or \"Majoritarian Proximist\"
+11
+0.0
+1
+
+TEXTBOX
+318
+164
+468
+192
+\"Ostrich\", \"Discounter\" or \"Rigorous Eliminator\"
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
