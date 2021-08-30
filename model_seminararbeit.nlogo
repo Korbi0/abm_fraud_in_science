@@ -1,8 +1,23 @@
+extensions [py]
+breed [dicts dict]
+dicts-own [entries]
+
+breed [dict_entries dict_entry]
+dict_entries-own [key value]
+
+
 breed [research_areas research_area]
 research_areas-own [value] ; each research area consists of a question which has a definitive true value between 0 and 1 as its answer
 
+
+; because netlogo (as far as i can tell) lacks dictionary functionality, I use links to represent the credence a researcher has in research question
+undirected-link-breed [credences credence]
+credences-own [c]
+
+undirected-link-breed [professional_connections professional_connection]
+
 breed [researchers researcher]
-researchers-own [open_to_fraud fraud_propensity number_of_frauds_committed number_of_frauds_detected speciality reported_results node-clustering-coefficient]
+researchers-own [open_to_fraud fraud_propensity number_of_frauds_committed number_of_frauds_detected speciality reported_results node-clustering-coefficient data_from_other_researchers]
 ; each researcher is either open to fraud or not (and if so has a certain propensity for fraud), has a specific research area (speciality)
 ; has a list of reported results (the results they published)
 
@@ -18,7 +33,7 @@ to setup
   set number_of_agents (number_of_research_areas * researchers_per_area)
   create-researchers number_of_agents
 
-  create-research_areas number_of_research_areas
+
 
   ask researchers [
     set open_to_fraud (random-float 1) < share_of_fraudulent_scientists
@@ -27,8 +42,39 @@ to setup
     set number_of_frauds_detected 0
     set reported_results []
     set speciality 0
+    setxy random-xcor random-ycor
   ]
 
+
+
+  ; create network
+  if Network = "Cycle" [cycle]
+  if Network = "Wheel" [wheel]
+  if Network = "Complete" [complete]
+
+
+  create-research_areas number_of_research_areas
+
+  layout-circle research_areas 5
+
+  ask researchers [
+    create-credences-with research_areas
+  ]
+
+  ask professional_connections [
+    set color 67
+  ]
+
+  ask credences [
+    set color 87
+  ]
+
+
+
+  ask credences [
+    ; each researcher starts out agnostic about each research question, i.e. the credence is .5
+    set c 0.5
+  ]
 
   ask research_areas [
     ; set the true value of the question investigated in each research area
@@ -85,7 +131,7 @@ end
 
 
 to fraud_detection
-  ifelse number_of_frauds_committed [
+  ifelse number_of_frauds_committed = 0 [
     ; if no frauds have been committed, do nothing
   ]
   [
@@ -130,6 +176,30 @@ end
 
 
 to reidian_updating
+  ; update credence about all research questions by adopting the opinion of a random neighbor
+  ask credence-neighbors [
+
+    ; The credence-neighbors are the research areas
+
+    ifelse (self = ([speciality] of myself)) [print "my own speciality"][
+
+    ; We go thorugh all research subjects
+    let subj self
+    let resrchr myself
+;    let cred "None"
+;    ask in-credence-from myself [
+;      set cred c
+;    ]
+    let cred get_credence resrchr subj
+
+    ask myself [
+      ask one-of in-professional_connection-neighbors [
+        set cred get_credence self subj
+      ]
+      set_credence subj cred
+    ]
+  ]
+  ]
 
 end
 
@@ -160,6 +230,69 @@ end
 
 
 
+
+to set_credence [subject_ new_credence]
+  ; sets the credence about "subject_" to "new_credence"
+  ask in-credence-from subject_ [
+    set c new_credence
+  ]
+end
+
+to-report get_credence [resrchr subject_]
+  ; reports the credence in about "subject_" for the calling turtle
+  let cred "None"
+  ask subject_ [
+    ask in-credence-from resrchr [
+      set cred c
+    ]
+  ]
+;  ask in-credence-from subject_ [
+;    set cred c
+;  ]
+  report cred
+end
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;
+; dictionary functionality
+;;;;;;;;;;;;;;;;;;;;;;
+to-report create_dict
+  let res "None"
+  create-dicts 1 [
+    set entries []
+    set res self
+  ]
+  report res
+end
+
+
+to enter_value [d k v]
+  ; enters the value v for the key k into the dictionary d
+  let entr "None"
+  create-dict_entries 1 [
+    set entr self
+    set key k
+    set value v
+    set color white
+  ]
+
+  ask d [
+    set entries (lput entr entries)
+  ]
+
+end
+
+
+to-report retrieve_value [d k]
+  ; Retrive the value for the key k in dictionary d
+  let res "None"
+  let entrs ([entries] of d)
+  foreach entrs [
+    x -> (if (([key] of x) = k) [set res ([value] of x)])
+  ]
+  report res
+end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; code for creating network structures
@@ -204,8 +337,8 @@ to wheel
 end
 
 to complete
-  ask turtles [create-links-with other turtles]
-  layout-circle turtles 15
+  ask researchers [create-professional_connections-with other researchers]
+  layout-circle researchers 15
 end
 
 ;to alpha-ring
@@ -348,10 +481,10 @@ ticks
 30.0
 
 SLIDER
-69
-210
-292
-243
+57
+300
+280
+333
 number_of_research_areas
 number_of_research_areas
 1
@@ -363,25 +496,25 @@ NIL
 HORIZONTAL
 
 SLIDER
-70
-243
-258
-276
+58
+333
+246
+366
 researchers_per_area
 researchers_per_area
 0
 100
-49.0
+5.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-71
-276
-243
-309
+59
+366
+231
+399
 degree
 degree
 0
@@ -398,7 +531,7 @@ INPUTBOX
 297
 150
 Testimonial_Norm
-NIL
+Reidian
 1
 0
 String
@@ -409,7 +542,7 @@ INPUTBOX
 297
 210
 Fraud_Related_Norm
-NIL
+Ostrich
 1
 0
 String
@@ -438,7 +571,7 @@ BUTTON
 92
 NIL
 go
-NIL
+T
 1
 T
 OBSERVER
@@ -449,10 +582,10 @@ NIL
 1
 
 SLIDER
-69
-308
-258
-341
+57
+398
+246
+431
 noise_in_experiments
 noise_in_experiments
 0
@@ -464,10 +597,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-70
-380
-346
-413
+58
+470
+334
+503
 highest_possible_fraud_propensity
 highest_possible_fraud_propensity
 0
@@ -479,10 +612,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-70
-349
-352
-382
+58
+439
+340
+472
 share_of_fraudulent_scientists
 share_of_fraudulent_scientists
 0
@@ -494,10 +627,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-71
-414
-317
-447
+59
+504
+305
+537
 risk_of_getting_caught
 risk_of_getting_caught
 0
@@ -509,10 +642,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-71
-449
-263
-482
+59
+539
+251
+572
 fraud_discount_factor
 fraud_discount_factor
 0
@@ -539,6 +672,27 @@ TEXTBOX
 468
 192
 \"Ostrich\", \"Discounter\" or \"Rigorous Eliminator\"
+11
+0.0
+1
+
+INPUTBOX
+68
+210
+297
+270
+Network
+Complete
+1
+0
+String
+
+TEXTBOX
+324
+221
+474
+249
+\"Complete\", \"Cycle\", or \"Wheel\"
 11
 0.0
 1
