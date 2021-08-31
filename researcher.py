@@ -25,11 +25,11 @@ class researcher:
 
     def report_research(self):
         experimental_result = self.speciality.get_experimental_result()
-        commit_fraud = self.open_to_fraud & random.random() < self.fraud_propensity
+        commit_fraud = self.open_to_fraud and random.random() < self.fraud_propensity
         if not commit_fraud:
-            self.report_research.append(experimental_result)
+            self.reported_results.append(experimental_result)
         else:
-            self.report_research.append(1)
+            self.reported_results.append(1)
     
     def fraud_detection(self, risk_of_getting_caught):
         if self.number_of_frauds_committed == 0:
@@ -56,18 +56,32 @@ class researcher:
     def form_opinions(self):
         for r_a in self.credences:
             o = self.form_opinion_about_research_area(r_a)
-            self.credences[r_a] = o
                 
-    def form_opinion_about_research_area(self, r_a:research_area, all_researchers:list):
+    def form_opinion_about_research_area(self, r_a, all_researchers:list):
         # self.credences[self] = 1 
         weights_and_data = []
+
+
+
         if r_a != self.speciality:
             # If it is not one's own speciality, only binary opinions are available
             for resrchr in all_researchers:
+                if resrchr.speciality == self.speciality:
+                    continue
                 weights_and_data.append((self.credences[resrchr], self.data_from_other_researchers[resrchr]))
         
         else:
-            
+            for resrchr in all_researchers:
+                if resrchr.speciality != r_a:
+                    continue
+                for datapoint in self.data_from_other_researchers[resrchr]:
+                    weights_and_data.append((self.credences[resrchr], datapoint))
+        
+        opinion = self.form_opinion_from_weights_and_data_list(weights_and_data)
+
+        self.credences[r_a] = opinion
+        return opinion
+
     
     def form_opinion_from_weights_and_data_list(self, weights_and_data_list):
         """weights_and_data_list needs to be a list of tuples, where each tuple has two entries:
@@ -83,6 +97,7 @@ class researcher:
 
     def reidian_updating(self, res_areas_dict:dict):
         self.reidian_consult_other_researcher(res_areas_dict)
+        self.form_opinions()
         
 
     
@@ -105,6 +120,10 @@ class researcher:
         an alternative would be to implement significance tests.
         """
         return round(statistics.mean(reported_results))
+    
+    def set_trustworthyness(self, trustworthyness_dict):
+        self.trustwortyness_scores = trustworthyness_dict
+    
 
 
 
@@ -139,16 +158,16 @@ class simulation:
 
 
     def get_research_areas(self):
-        self.res_areas = [research_area(random.random()) for i in range(self.number_of_res_areas)]
+        self.res_areas = [research_area(random.random()) for i in range(self.number_research_areas)]
         return self.res_areas
 
     def get_researchers(self):
         researchers = []
-        self.res_areas_dict = ()
+        self.res_areas_dict = dict()
         for res_area in self.res_areas:
             researchers_in_area = []
             for i in range(self.number_researchers_per_area):
-                fraudulent = (random.random() < self.proportion_of_fraudulent_researchers)
+                fraudulent = (random.random() < self.proportion_fraudulent_researchers)
                 fraud_propensity = random.uniform(0, self.maximal_fraud_propensity)
                 resrchr = researcher(open_to_fraud=fraudulent,
                     fraud_propensity=fraud_propensity,
@@ -156,12 +175,13 @@ class simulation:
                     number_of_frauds_detected=0,
                     speciality=res_area,
                     reported_results=[],
+                    testimonial_norm=self.testimonial_norm,
+                    fraud_norm=self.fraud_norm,
                     data_from_other_researchers=dict())
                 resrchr.credences = {r_a: 0.5 for r_a in self.res_areas} # set initial credence to .5 on every question
                 researchers.append(resrchr)
                 researchers_in_area.append(resrchr)
             self.res_areas_dict[res_area] = researchers_in_area
-            
 
         self.researchers = researchers
         return self.researchers
@@ -169,12 +189,15 @@ class simulation:
     def setup(self):
         self.get_research_areas()
         self.get_researchers()
+        original_trustworthyness = {r:1 for r in self.researchers}
+        for resrchr in self.researchers:
+            resrchr.set_trustworthyness(original_trustworthyness)
 
     def run(self):
         for i in range(self.iterations):
             for researcher in self.researchers:
                 researcher.report_research()
-                researcher.fraud_detection()
+                researcher.fraud_detection(self.risk_of_getting_caught)
                 researcher.update_credences()
 
 
