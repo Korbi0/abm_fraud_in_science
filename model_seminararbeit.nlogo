@@ -47,6 +47,7 @@ to setup
 
 
 
+
   ; create network
   if Network = "Cycle" [cycle]
   if Network = "Wheel" [wheel]
@@ -86,7 +87,12 @@ to setup
     ]
   ]
 
-
+  ask researchers [
+    hatch-dicts 1 [
+      set entries []
+    ]
+    set data_from_other_researchers (other turtles-here)
+  ]
 
 
 end
@@ -181,7 +187,15 @@ to reidian_updating
 
     ; The credence-neighbors are the research areas
 
-    ifelse (self = ([speciality] of myself)) [print "my own speciality"][
+    ifelse (self = ([speciality] of myself)) [
+      print (word speciality " is the speciality of " myself)
+      let dic data_from_other_researchers
+
+      ask one-of in-professional_connection-neighbors [
+        let dat reported_results
+        enter_value dic self dat
+      ]
+    ][
 
     ; We go thorugh all research subjects
     let subj self
@@ -257,7 +271,13 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;
 ; dictionary functionality
 ;;;;;;;;;;;;;;;;;;;;;;
+
+
+
 to-report create_dict
+  ; returns a new (empty) dictionary
+
+
   let res "None"
   create-dicts 1 [
     set entries []
@@ -269,6 +289,9 @@ end
 
 to enter_value [d k v]
   ; enters the value v for the key k into the dictionary d
+
+
+
   let entr "None"
   create-dict_entries 1 [
     set entr self
@@ -277,8 +300,19 @@ to enter_value [d k v]
     set color white
   ]
 
+  ifelse ((retrieve_value d k) = "None") [
+    ; if the key is not yet occupied, add it
   ask d [
     set entries (lput entr entries)
+  ]
+  ]
+  [
+    ; if there already is a value for the key, replace that value
+    ask d [
+    foreach entries [
+        x -> ask x [if key = k [set value v]]
+    ]
+  ]
   ]
 
 end
