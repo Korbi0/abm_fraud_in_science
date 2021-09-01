@@ -1,8 +1,12 @@
 import random
 import statistics
+import copy
+
+
 
 class researcher:
-    def __init__(self, open_to_fraud:bool,
+    def __init__(self, id:int,
+    open_to_fraud:bool,
     fraud_propensity:float,
     number_of_frauds_committed:int,
     number_of_frauds_detected:int,
@@ -11,17 +15,21 @@ class researcher:
     fraud_norm,
     reported_results,
     data_from_other_researchers) -> None:
+        self.id = id
         self.open_to_fraud = open_to_fraud
         self.fraud_propensity = fraud_propensity
         self.number_of_frauds_committed = number_of_frauds_committed
         self.number_of_frauds_detected = number_of_frauds_detected
         self.speciality = speciality
-        self.testimonial_norm = testimonial_norm,
-        self.fraud_norm = fraud_norm,
+        self.testimonial_norm = testimonial_norm
+        self.fraud_norm = fraud_norm
         self.reported_results = reported_results
         self.data_from_other_researchers = data_from_other_researchers
         self.trustwortyness_scores = dict()
         self.credences=dict()
+
+    def __str__(self) -> str:
+        return f"Researcher {self.id}"
 
     def report_research(self):
         experimental_result = self.speciality.get_experimental_result()
@@ -57,8 +65,9 @@ class researcher:
         for r_a in self.credences:
             o = self.form_opinion_about_research_area(r_a)
                 
-    def form_opinion_about_research_area(self, r_a, all_researchers:list):
-        # self.credences[self] = 1 
+    def form_opinion_about_research_area(self, r_a):
+        all_researchers = list(self.trustwortyness_scores.keys())
+        # self.trustworthyness[self] = 1 
         weights_and_data = []
 
 
@@ -66,16 +75,28 @@ class researcher:
         if r_a != self.speciality:
             # If it is not one's own speciality, only binary opinions are available
             for resrchr in all_researchers:
-                if resrchr.speciality == self.speciality:
+                if resrchr.speciality != r_a:
                     continue
-                weights_and_data.append((self.credences[resrchr], self.data_from_other_researchers[resrchr]))
+                try:
+                    data_from_researcher = self.data_from_other_researchers[resrchr]
+                except KeyError:
+                    # print(f"Researcher {self} hasn't gotten data from researcher {resrchr} yet.")
+                    continue
+                weights_and_data.append((self.trustwortyness_scores[resrchr], data_from_researcher))
         
         else:
             for resrchr in all_researchers:
                 if resrchr.speciality != r_a:
                     continue
-                for datapoint in self.data_from_other_researchers[resrchr]:
-                    weights_and_data.append((self.credences[resrchr], datapoint))
+                try:
+                    data_from_researcher = self.data_from_other_researchers[resrchr]
+                except KeyError:
+                    # print(f"Researcher {self} hasn't gotten data from researcher {resrchr} yet.")
+                    continue
+                for datapoint in data_from_researcher:
+                    weights_and_data.append((self.trustwortyness_scores[resrchr], datapoint))
+            for datapoint in self.reported_results:
+                weights_and_data.append((self.trustwortyness_scores[self], datapoint))
         
         opinion = self.form_opinion_from_weights_and_data_list(weights_and_data)
 
@@ -91,20 +112,24 @@ class researcher:
         sum_data = 0
         for weight, data in weights_and_data_list:
             total_weights += weight
-            sum_data = weight * data
+            sum_data += weight * data
         outcome = sum_data / total_weights
         return outcome
 
-    def reidian_updating(self, res_areas_dict:dict):
-        self.reidian_consult_other_researcher(res_areas_dict)
+    def reidian_updating(self):
+
+        self.reidian_consult_other_researcher()
         self.form_opinions()
         
 
     
-    def reidian_consult_other_researcher(self, res_areas_dict:dict):
+    def reidian_consult_other_researcher(self):
+        res_areas_dict = self.res_areas_dict
         for r_a in self.credences:
             # Select a random researcher with the same speciality
             person_to_consult = random.choice(res_areas_dict[r_a])
+            while person_to_consult == self:
+                person_to_consult = random.choice(res_areas_dict[r_a])
             if r_a == self.speciality:
                 # If the person to consult has the same speciality, take over their data
                 self.data_from_other_researchers[person_to_consult] = person_to_consult.reported_results
@@ -119,85 +144,33 @@ class researcher:
         the researcher will conclude that the question is to be answered affirmatively
         an alternative would be to implement significance tests.
         """
-        return round(statistics.mean(reported_results))
+        try:
+            return round(statistics.mean(reported_results))
+        except statistics.StatisticsError:
+            return .5
     
     def set_trustworthyness(self, trustworthyness_dict):
-        self.trustwortyness_scores = trustworthyness_dict
+        self.trustwortyness_scores = copy.copy(trustworthyness_dict)
+
+    def set_credences(self, credences_dict):
+        self.credences = copy.copy(credences_dict)
     
 
 
 
 
 class research_area:
-    def __init__(self, value) -> None:
+    def __init__(self, id, value) -> None:
+        self.id = id
         self.value = value
+    
+    def __str__(self):
+        return f"Research Area {self.id}"
     
     def get_experimental_result(self, noise=.2):
         result = self.value + random.gauss(0, noise)
         return result
 
 
-class simulation:
-    def __init__(self, number_research_areas,
-    number_researchers_per_area,
-    proportion_fraudulent_researchers,
-    maximal_fraud_propensity,
-    risk_of_getting_caught,
-    iterations,
-    testimonial_norm,
-    fraud_norm) -> None:
-        self.number_research_areas = number_research_areas
-        self.number_researchers_per_area = number_researchers_per_area
-        self.proportion_fraudulent_researchers = proportion_fraudulent_researchers
-        self.maximal_fraud_propensity = maximal_fraud_propensity
-        self.risk_of_getting_caught = risk_of_getting_caught
-        self.iterations = iterations
-        self.testimonial_norm = testimonial_norm
-        self.fraud_norm = fraud_norm
-        self.setup()
-
-
-    def get_research_areas(self):
-        self.res_areas = [research_area(random.random()) for i in range(self.number_research_areas)]
-        return self.res_areas
-
-    def get_researchers(self):
-        researchers = []
-        self.res_areas_dict = dict()
-        for res_area in self.res_areas:
-            researchers_in_area = []
-            for i in range(self.number_researchers_per_area):
-                fraudulent = (random.random() < self.proportion_fraudulent_researchers)
-                fraud_propensity = random.uniform(0, self.maximal_fraud_propensity)
-                resrchr = researcher(open_to_fraud=fraudulent,
-                    fraud_propensity=fraud_propensity,
-                    number_of_frauds_committed=0,
-                    number_of_frauds_detected=0,
-                    speciality=res_area,
-                    reported_results=[],
-                    testimonial_norm=self.testimonial_norm,
-                    fraud_norm=self.fraud_norm,
-                    data_from_other_researchers=dict())
-                resrchr.credences = {r_a: 0.5 for r_a in self.res_areas} # set initial credence to .5 on every question
-                researchers.append(resrchr)
-                researchers_in_area.append(resrchr)
-            self.res_areas_dict[res_area] = researchers_in_area
-
-        self.researchers = researchers
-        return self.researchers
-
-    def setup(self):
-        self.get_research_areas()
-        self.get_researchers()
-        original_trustworthyness = {r:1 for r in self.researchers}
-        for resrchr in self.researchers:
-            resrchr.set_trustworthyness(original_trustworthyness)
-
-    def run(self):
-        for i in range(self.iterations):
-            for researcher in self.researchers:
-                researcher.report_research()
-                researcher.fraud_detection(self.risk_of_getting_caught)
-                researcher.update_credences()
 
 
