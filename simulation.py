@@ -135,16 +135,21 @@ class simulation:
                 specialists_avg_distances_from_truth[r_a].append(statistics.mean(self.specialists_distances_from_truth(r_a)))
                 number_of_nonspecialist_correct_believers[r_a].append(self.number_of_non_specialists_with_correct_binary_opinion(r_a))
             iteration_list.append(self.iteration)
+        
+        fig, axs = plt.subplots(math.ceil(self.number_research_areas / 2), 2)
+        fig.tight_layout()
+        for i in range(len(self.res_areas)):
+            r_a = self.res_areas[i]
+            axs[int(i/2), i % 2].plot(iteration_list, specialists_avg_distances_from_truth[r_a])
+            axs[int(i/2), i % 2].set_title(f"{r_a} (value {round(r_a.value, 3)})")
 
         fig, axs = plt.subplots(math.ceil(self.number_research_areas / 2), 2)
+        fig.tight_layout()
         for i in range(len(self.res_areas)):
-            axs[int(i/2), i % 2].plot(iteration_list, specialists_avg_distances_from_truth[self.res_areas[i]])
-            axs[int(i/2), i % 2].set_title(str(self.res_areas[i]))
-
-        fig, axs = plt.subplots(math.ceil(self.number_research_areas / 2), 2)
-        for i in range(len(self.res_areas)):
-            axs[int(i/2), i % 2].plot(iteration_list, number_of_nonspecialist_correct_believers[self.res_areas[i]])
-            axs[int(i/2), i % 2].set_title(str(self.res_areas[i]))
+            fig.tight_layout()
+            r_a = self.res_areas[i]
+            axs[int(i/2), i % 2].plot(iteration_list, number_of_nonspecialist_correct_believers[r_a])
+            axs[int(i/2), i % 2].set_title(f"{r_a} (value {round(r_a.value, 3)})")
 
     def run(self):
         """

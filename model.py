@@ -12,7 +12,7 @@ if __name__ == "__main__":
         proportion_fraudulent_researchers=.3,
         maximal_fraud_propensity=.4,
         risk_of_getting_caught=.1,
-        iterations=1000,
+        iterations=100,
         testimonial_norm="Reidian",
         fraud_norm="Ostrich")
     sim.run_with_plotting()
