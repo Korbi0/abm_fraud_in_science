@@ -179,12 +179,16 @@ end
 
 
 to update_credences
+
+
   if Testimonial_Norm = "Reidian" [reidian_updating]
   if Testimonial_Norm = "Majoritarian Reidian" [majoritarian_reidian_updating]
   if Testimonial_Norm = "E-Truster" [e_trusting]
   if Testimonial_Norm = "Majoritarian E-Truster" [majoritarian_e_trusting]
   if Testimonial_Norm = "Proximist" [proximist]
   if Testimonial_Norm = "Majoritarian Proximist" [majoritarian_proximist]
+
+
 end
 
 
@@ -224,45 +228,32 @@ to reidian_updating
     ]
   ]
 
-  form_opinion
-
-
-;  ask credence-neighbors [
-;
-;    ; The credence-neighbors are the research areas
-;
-;    ifelse (self = ([speciality] of myself)) [
-;      print (word speciality " is the speciality of " myself)
-;      let dic data_from_other_researchers
-;
-;      ask one-of in-professional_connection-neighbors [
-;        let dat reported_results
-;        enter_value dic self dat
-;      ]
-;    ][
-;
-;    ; We go thorugh all research subjects
-;    let subj self
-;    let resrchr myself
-;;    let cred "None"
-;;    ask in-credence-from myself [
-;;      set cred c
-;;    ]
-;    let cred get_credence resrchr subj
-;
-;    ask myself [
-;      ask one-of in-professional_connection-neighbors [
-;        set cred get_credence self subj
-;      ]
-;      set_credence subj cred
-;    ]
-;  ]
-;  ]
+  form_opinion_non_majoritarian_updating
 
 end
 
 to majoritarian_reidian_updating
+  ifelse not take_only_binary_info_from_colleagues [print "Majoritarian Reidian updatig only makes sense if you take binary info"]
+  [
+    let avg 0
+    let total_weights 0
+    ask in-professional_connection-neighbors [ ; get the opinions of the researchers in your network
+      let w get_trustworthyness
+      set total_weights (total_weights + w)
+      set avg (avg + w * (form_binary_opinion reported_results))
+    ]
 
+
+    ; also take your own opinion into account
+    let w get_trustworthyness
+    foreach reported_results [ ; this is the researcher's own data
+      z -> set total_weights (total_weights + w)
+      set avg (avg + w * z)
+    ]
+    let result (avg / total_weights)
+    set credence result
+
+  ]
 end
 
 to e_trusting
@@ -300,7 +291,7 @@ to-report get_trustworthyness
 end
 
 
-to form_opinion
+to form_opinion_non_majoritarian_updating
   let total_weights 0
   let sum_data 0
 
@@ -711,7 +702,7 @@ INPUTBOX
 297
 150
 Testimonial_Norm
-Reidian
+Majoritarian Reidian
 1
 0
 String
@@ -722,7 +713,7 @@ INPUTBOX
 297
 210
 Fraud_Related_Norm
-Rigorous Eliminator
+Discounter
 1
 0
 String
@@ -770,7 +761,7 @@ noise_in_experiments
 noise_in_experiments
 0
 1
-0.15
+0.25
 0.05
 1
 NIL
@@ -800,7 +791,7 @@ share_of_fraudulent_scientists
 share_of_fraudulent_scientists
 0
 1
-0.9
+0.45
 .05
 1
 NIL
@@ -841,7 +832,7 @@ TEXTBOX
 98
 537
 151
-\"Reidian\", \"Majoritarian Reidian\", \"E-Truster\", \"Majoritarian E-Truster\", \"Proximist\" or \"Majoritarian Proximist\"
+\"Reidian\", \"Majoritarian Reidian\"
 11
 0.0
 1
@@ -884,7 +875,7 @@ SWITCH
 367
 take_only_binary_info_from_colleagues
 take_only_binary_info_from_colleagues
-1
+0
 1
 -1000
 
