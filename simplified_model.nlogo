@@ -17,13 +17,13 @@ research_areas-own [value] ; each research area consists of a question which has
 undirected-link-breed [professional_connections professional_connection]
 
 breed [researchers researcher]
-researchers-own [open_to_fraud fraud_propensity number_of_frauds_committed number_of_frauds_detected reported_results node-clustering-coefficient data_from_other_researchers]
+researchers-own [credence open_to_fraud fraud_propensity number_of_frauds_committed number_of_frauds_detected reported_results node-clustering-coefficient data_from_other_researchers]
 ; each researcher is either open to fraud or not (and if so has a certain propensity for fraud), has a specific research area (speciality)
 ; has a list of reported results (the results they published)
 
 
 
-globals[number_of_agents clustering-coefficient average-path-length infinity] ; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
+globals[number_of_agents clustering-coefficient average-path-length infinity question] ; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
 
 to setup
   clear-all
@@ -42,14 +42,22 @@ to setup
     set number_of_frauds_committed 0
     set number_of_frauds_detected 0
     set reported_results []
+    set credence .5
     ;set speciality 0
     setxy random-xcor random-ycor
   ]
 
   ask researchers [
     set data_from_other_researchers table:make
+    let d data_from_other_researchers
     ask other researchers [
-      table:put data_from_other_researchers self []
+      ifelse take_only_binary_info_from_colleagues [
+        table:put d who [1 0.5] ; Initially, each researcher has trustworthyness 1 and credence .5 in the question
+      ]
+      [
+        table:put d who [1 [0.5]] ; Initially, each researcher has trustworthyness 1 and credence .5 in the question
+      ]
+
     ]
   ]
 
@@ -62,7 +70,11 @@ to setup
   if Network = "Complete" [complete]
 
 
-  create-research_areas 1
+  create-research_areas 1 [
+    set value random-float 1
+    if hard_research_question [set value 0.48]
+    set question self
+  ]
 
   layout-circle research_areas 5
 
@@ -108,14 +120,17 @@ end
 to go
   ask researchers [
     report_research
+
     fraud_detection
+
     update_credences
+
   ]
   tick
 end
 
 to report_research
-  let experimental_result get_experimental_result (research_area 0)
+  let experimental_result get_experimental_result question
   ifelse open_to_fraud
   [ ; the scenario where the researcher is open to committing fraud:
     let commits_fraud ((random-float 1) < fraud_propensity) ; roll the dice on whether the researcher committs fraud this round
@@ -139,8 +154,8 @@ to-report form_binary_opinion [rep_results]
   ; there are different ways that this can be realized. In the first iteration, I implement a simple averaging of the results and then a cutoff point at .5: if the average result is higher than .5,
   ; the researcher will conclude that the question is to be answered affirmatively
   ; an alternative would be to implement significance tests.
-
-  report ((mean rep_results) > .5)
+  if (length rep_results) = 0 [report .5] ; if the researcher does not have any data, they are agnostic, i.e. .5
+  report round (mean rep_results)
 end
 
 
@@ -198,16 +213,18 @@ to reidian_updating
     ask one-of in-professional_connection-neighbors [
       let binary_opinion form_binary_opinion reported_results
       let trustworthyness get_trustworthyness
-      table:put d self (list trustworthyness binary_opinion)
+      table:put d who (list trustworthyness binary_opinion)
     ]
   ]
   [
     ask one-of in-professional_connection-neighbors [
       let data reported_results
       let trustworthyness get_trustworthyness
-      table:put d self (list trustworthyness data)
+      table:put d who (list trustworthyness data)
     ]
   ]
+
+  form_opinion
 
 
 ;  ask credence-neighbors [
@@ -274,10 +291,10 @@ to-report get_trustworthyness
   if Fraud_Related_Norm = "Ostrich"[report 1]
   if Fraud_Related_Norm = "Discounter" [
     if number_of_frauds_detected  = 0 [report 1]
-    let trustworthyness fraud_discount_factor / number_of_frauds_detected
+    let trustworthyness (fraud_discount_factor / number_of_frauds_detected)
     report trustworthyness
   ]
-  if Fraud_Related_Norm = "Eliminator" [
+  if Fraud_Related_Norm = "Rigorous Eliminator" [
     ifelse (number_of_frauds_detected  = 0) [report 1] [report 0]
   ]
 end
@@ -288,22 +305,39 @@ to form_opinion
   let sum_data 0
 
   ifelse take_only_binary_info_from_colleagues [
-    foreach table:to-list data_from_other_researchers  [
-      x -> set total_weights (total_weights + (item 0 x))
-      set sum_data (sum_data + (item 1 x))
+    foreach table:to-list data_from_other_researchers  [ ; this is the data from other researchers
+      x -> let data (item 1 x)
+      let w (item 0 data)
+      set total_weights (total_weights + w)
+      set sum_data (sum_data + w * (item 1 data))
+    ]
+    let w get_trustworthyness
+    foreach reported_results [ ; this is the researcher's own data
+      z -> set total_weights (total_weights + w)
+      set sum_data (sum_data + w * z)
     ]
   ]
   [
-    foreach table:to-list data_from_other_researchers [
-      x -> let weight (item 0 x)
-      foreach (item 1 x) [
+    foreach table:to-list data_from_other_researchers [ ; this is the data from other researchers
+      x -> let data (item 1 x)
+      let weight (item 0 data)
+      foreach (item 1 data) [
         y -> set total_weights (total_weights + weight)
-        set sum_data (sum_data + y)
+        set sum_data (sum_data + weight * y)
       ]
+    ]
+    let w get_trustworthyness
+    foreach reported_results [ ; this is the researcher's own data
+      z -> set total_weights (total_weights + w)
+      set sum_data (sum_data + w * z)
     ]
   ]
 
+
+
   let result (sum_data / total_weights)
+
+  set credence result
 
 end
 
@@ -329,6 +363,54 @@ end
 ;;  ]
 ;  report cred
 ;end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; for plotting
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report number_of_reserachers_with_correct_binary_opinion
+  let correct round([value] of question)
+  let i 0
+  ask researchers with [credence != .5] [
+    if round(credence) = correct [set i (i + 1)]
+  ]
+  report i
+end
+
+
+to-report average_credence
+
+  let l []
+  ask researchers [
+    set l (lput credence l)
+  ]
+
+  let average mean l
+
+  report average
+end
+
+
+to-report average_distance_from_truth
+  report abs (average_credence - true_value)
+end
+
+to-report true_value
+  let truth 0
+  ask question [set truth value]
+  report truth
+end
+
+
+to-report credence_in_fraudsters
+  let i 0
+  ask researchers with [open_to_fraud] [
+    set i (i + get_trustworthyness)
+  ]
+  report i
+end
+
 
 
 
@@ -572,8 +654,8 @@ GRAPHICS-WINDOW
 16
 -16
 16
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -640,7 +722,7 @@ INPUTBOX
 297
 210
 Fraud_Related_Norm
-Ostrich
+Rigorous Eliminator
 1
 0
 String
@@ -688,7 +770,7 @@ noise_in_experiments
 noise_in_experiments
 0
 1
-0.2
+0.15
 0.05
 1
 NIL
@@ -703,7 +785,7 @@ highest_possible_fraud_propensity
 highest_possible_fraud_propensity
 0
 1
-0.3
+0.5
 .05
 1
 NIL
@@ -718,7 +800,7 @@ share_of_fraudulent_scientists
 share_of_fraudulent_scientists
 0
 1
-0.3
+0.9
 .05
 1
 NIL
@@ -733,7 +815,7 @@ risk_of_getting_caught
 risk_of_getting_caught
 0
 1
-0.1
+0.05
 .05
 1
 NIL
@@ -805,6 +887,94 @@ take_only_binary_info_from_colleagues
 1
 1
 -1000
+
+PLOT
+570
+178
+770
+328
+number_of_reserachers_with_correct_binary_opinion
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot number_of_reserachers_with_correct_binary_opinion"
+
+PLOT
+631
+436
+831
+586
+average credence vs truth
+NIL
+NIL
+0.0
+1.0
+0.0
+1.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot average_credence"
+"pen-1" 1.0 0 -13840069 true "" "plot true_value"
+
+SWITCH
+372
+393
+580
+426
+hard_research_question
+hard_research_question
+0
+1
+-1000
+
+PLOT
+874
+481
+1074
+631
+average distance from truth
+NIL
+NIL
+0.0
+10.0
+0.0
+0.5
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot average_distance_from_truth"
+
+MONITOR
+1083
+504
+1278
+549
+NIL
+average_distance_from_truth
+17
+1
+11
+
+MONITOR
+1127
+584
+1355
+629
+NIL
+credence_in_fraudsters
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
