@@ -476,7 +476,7 @@ to link-n
 end
 
 to cycle
-  ifelse ((degree mod 2) != 0 ) or (degree > number_of_agents)
+  ifelse ((degree mod 2) != 0 ) or (degree > count researchers)
   [
     user-message "Degree error"
   ]
@@ -486,24 +486,24 @@ to cycle
     [
       let n 0
       while [n < count turtles] [
-        ask turtle n [create-link-with turtle ( (n + i) mod count turtles) ]
+        ask turtle n [create-professional_connection-with researcher ( (n + i) mod count researchers) ]
         set n n + 1
       ]
       set i i + 1
     ]
   ]
-  layout-circle sort turtles 15
+  layout-circle sort researchers 15
 end
 
 to wheel
-  ask turtle 0 [create-links-with other turtles]
+  ask researcher 0 [create-professional_connections-with other researchers]
 
   let n 1
-  while [n < count turtles] [
-    ask turtle n [create-link-with turtle ( (n mod (count turtles - 1)) + 1)  ]
+  while [n < count researchers] [
+    ask researcher n [create-professional_connection-with researcher ( (n mod (count researchers - 1)) + 1)  ]
     set n n + 1
   ]
-  let outside (turtle-set turtles with [who > 0])
+  let outside (turtle-set researchers with [who > 0])
   layout-circle sort outside 15
 end
 
@@ -660,7 +660,7 @@ number_of_research_areas
 number_of_research_areas
 1
 10
-5.0
+4.0
 1
 1
 NIL
@@ -690,7 +690,7 @@ degree
 degree
 0
 100
-51.0
+4.0
 1
 1
 NIL
@@ -791,7 +791,7 @@ share_of_fraudulent_scientists
 share_of_fraudulent_scientists
 0
 1
-0.45
+0.8
 .05
 1
 NIL
@@ -853,7 +853,7 @@ INPUTBOX
 297
 270
 Network
-Complete
+Cycle
 1
 0
 String
