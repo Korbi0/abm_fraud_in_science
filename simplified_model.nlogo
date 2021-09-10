@@ -74,6 +74,7 @@ to setup
     set value random-float 1
     if hard_research_question [set value 0.48]
     set question self
+    set color white
   ]
 
   layout-circle research_areas 5
@@ -282,7 +283,8 @@ to-report get_trustworthyness
   if Fraud_Related_Norm = "Ostrich"[report 1]
   if Fraud_Related_Norm = "Discounter" [
     if number_of_frauds_detected  = 0 [report 1]
-    let trustworthyness (fraud_discount_factor / number_of_frauds_detected)
+
+    let trustworthyness (fraud_discount_factor * (ticks / number_of_frauds_detected))
     report trustworthyness
   ]
   if Fraud_Related_Norm = "Rigorous Eliminator" [
@@ -394,7 +396,7 @@ to-report true_value
 end
 
 
-to-report credence_in_fraudsters
+to-report trust_in_fraudsters
   let i 0
   ask researchers with [open_to_fraud] [
     set i (i + get_trustworthyness)
@@ -403,7 +405,17 @@ to-report credence_in_fraudsters
 end
 
 
+to-report eighty_percent_true_opinion
+  let i count researchers
+  let k number_of_reserachers_with_correct_binary_opinion
 
+  let r ((k / i) > .8)
+  report r
+end
+
+to-report avg_dist_from_truth_very_small
+  report average_distance_from_truth < tolerance
+end
 
 ;;;;;;;;;;;;;;;;;;;;;;
 ; dictionary functionality
@@ -652,40 +664,40 @@ ticks
 30.0
 
 SLIDER
-57
-300
-280
-333
+69
+561
+347
+594
 number_of_research_areas
 number_of_research_areas
 1
 10
-4.0
+1.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-58
+69
 333
-246
+345
 366
 researchers_per_area
 researchers_per_area
 0
 100
-5.0
+20.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-59
-366
-231
-399
+70
+528
+347
+561
 degree
 degree
 0
@@ -695,28 +707,6 @@ degree
 1
 NIL
 HORIZONTAL
-
-INPUTBOX
-68
-90
-297
-150
-Testimonial_Norm
-Majoritarian Reidian
-1
-0
-String
-
-INPUTBOX
-68
-150
-297
-210
-Fraud_Related_Norm
-Discounter
-1
-0
-String
 
 BUTTON
 70
@@ -753,55 +743,55 @@ NIL
 1
 
 SLIDER
-57
+70
+366
+345
+399
+noise_in_experiments
+noise_in_experiments
+0
+1
+0.4
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+70
+429
+346
+462
+highest_possible_fraud_propensity
+highest_possible_fraud_propensity
+0
+1
+0.7
+.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+70
 398
-246
+345
 431
-noise_in_experiments
-noise_in_experiments
+share_of_fraudulent_scientists
+share_of_fraudulent_scientists
 0
 1
-0.25
-0.05
-1
-NIL
-HORIZONTAL
-
-SLIDER
-58
-470
-334
-503
-highest_possible_fraud_propensity
-highest_possible_fraud_propensity
-0
-1
-0.5
+0.0
 .05
 1
 NIL
 HORIZONTAL
 
 SLIDER
-58
-439
-340
-472
-share_of_fraudulent_scientists
-share_of_fraudulent_scientists
-0
-1
-0.8
-.05
-1
-NIL
-HORIZONTAL
-
-SLIDER
-59
-504
-305
-537
+70
+462
+345
+495
 risk_of_getting_caught
 risk_of_getting_caught
 0
@@ -813,66 +803,25 @@ NIL
 HORIZONTAL
 
 SLIDER
-59
-539
-251
-572
+70
+495
+346
+528
 fraud_discount_factor
 fraud_discount_factor
 0
 1
-0.5
+0.3
 .05
 1
 NIL
 HORIZONTAL
-
-TEXTBOX
-315
-98
-537
-151
-\"Reidian\", \"Majoritarian Reidian\"
-11
-0.0
-1
-
-TEXTBOX
-318
-164
-468
-192
-\"Ostrich\", \"Discounter\" or \"Rigorous Eliminator\"
-11
-0.0
-1
-
-INPUTBOX
-68
-210
-297
-270
-Network
-Cycle
-1
-0
-String
-
-TEXTBOX
-324
-221
-474
-249
-\"Complete\", \"Cycle\", or \"Wheel\"
-11
-0.0
-1
 
 SWITCH
-345
-334
-647
-367
+69
+269
+344
+302
 take_only_binary_info_from_colleagues
 take_only_binary_info_from_colleagues
 0
@@ -880,13 +829,13 @@ take_only_binary_info_from_colleagues
 -1000
 
 PLOT
-570
-178
-770
-328
+488
+89
+831
+239
 number_of_reserachers_with_correct_binary_opinion
-NIL
-NIL
+ticks
+researchers
 0.0
 10.0
 0.0
@@ -898,13 +847,13 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot number_of_reserachers_with_correct_binary_opinion"
 
 PLOT
-631
-436
+488
+238
 831
-586
+388
 average credence vs truth
-NIL
-NIL
+ticks
+avg credence
 0.0
 1.0
 0.0
@@ -917,10 +866,10 @@ PENS
 "pen-1" 1.0 0 -13840069 true "" "plot true_value"
 
 SWITCH
-372
-393
-580
-426
+69
+301
+344
+334
 hard_research_question
 hard_research_question
 0
@@ -928,17 +877,17 @@ hard_research_question
 -1000
 
 PLOT
-874
-481
-1074
-631
+489
+388
+831
+538
 average distance from truth
-NIL
-NIL
+ticks
+distance
 0.0
 10.0
 0.0
-0.5
+0.4
 true
 false
 "" ""
@@ -946,10 +895,10 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot average_distance_from_truth"
 
 MONITOR
-1083
-504
-1278
-549
+489
+539
+658
+584
 NIL
 average_distance_from_truth
 17
@@ -957,15 +906,96 @@ average_distance_from_truth
 11
 
 MONITOR
-1127
+659
+539
+832
 584
-1355
-629
 NIL
-credence_in_fraudsters
+trust_in_fraudsters
 17
 1
 11
+
+MONITOR
+674
+584
+849
+629
+NIL
+eighty_percent_true_opinion
+17
+1
+11
+
+INPUTBOX
+373
+566
+489
+626
+tolerance
+0.1
+1
+0
+Number
+
+MONITOR
+489
+582
+674
+627
+NIL
+avg_dist_from_truth_very_small
+17
+1
+11
+
+PLOT
+852
+484
+1052
+634
+Cumulative trust in fraudsters
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot trust_in_fraudsters"
+
+CHOOSER
+68
+106
+239
+151
+Testimonial_Norm
+Testimonial_Norm
+"Reidian" "Majoritarian Reidian"
+0
+
+CHOOSER
+68
+150
+239
+195
+Fraud_Related_Norm
+Fraud_Related_Norm
+"Ostrich" "Discounter" "Rigorous Eliminator"
+0
+
+CHOOSER
+68
+194
+206
+239
+Network
+Network
+"Complete" "Cycle" "Wheel"
+0
 
 @#$#@#$#@
 ## WHAT IS IT?
