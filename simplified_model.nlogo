@@ -1,29 +1,17 @@
 extensions [table]
-breed [dicts dict]
-dicts-own [entries]
 
-breed [dict_entries dict_entry]
-dict_entries-own [key value]
 
 
 breed [research_areas research_area]
 research_areas-own [value] ; each research area consists of a question which has a definitive true value between 0 and 1 as its answer
 
-
-; because netlogo (as far as i can tell) lacks dictionary functionality, I use links to represent the credence a researcher has in research question
-;undirected-link-breed [credences credence]
-;credences-own [c]
-
 undirected-link-breed [professional_connections professional_connection]
 
 breed [researchers researcher]
 researchers-own [credence open_to_fraud fraud_propensity number_of_frauds_committed number_of_frauds_detected reported_results node-clustering-coefficient data_from_other_researchers]
-; each researcher is either open to fraud or not (and if so has a certain propensity for fraud), has a specific research area (speciality)
-; has a list of reported results (the results they published)
 
 
-
-globals[number_of_agents clustering-coefficient average-path-length infinity question] ; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
+globals[number_of_agents clustering-coefficient average-path-length infinity question majority_convergence close_to_truth complete_convergence] ; partly taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
 
 to setup
   clear-all
@@ -34,24 +22,45 @@ to setup
   create-researchers number_of_agents
 
 
+  ; The following three global variables will be used to check whether convegence has been achieved
+  ; each will be filled with the tick-numbers of iterations at which the corresponding metrics are achieved
+  ; and be reset to the empty list when the corresponding metric is not achieved at a given moment
+  set majority_convergence []
+  set close_to_truth []
+  set complete_convergence []
+
 
 
   ask researchers [
+    ; A proportion of scientists will be open to fraud. Each scientist has a corresponding chance to be of the fraudulent kind
     set open_to_fraud (random-float 1) < share_of_fraudulent_scientists
+
+    ; Each scientist has their individual propensity for fraud. It only comes into play however if he/she is in principle open to fraud
     set fraud_propensity random-float highest_possible_fraud_propensity
+
+    ; At the time of their birth, a scientist has not yet committed any frauds, nor have any been discovered
     set number_of_frauds_committed 0
     set number_of_frauds_detected 0
+
+    ; A scientist also starts out with an empty list of reported results
     set reported_results []
+
+    ; The initial credence of each scientist in the research question is an agnostic 50%
     set credence .5
-    ;set speciality 0
     setxy random-xcor random-ycor
   ]
 
+
   ask researchers [
+
+    ; Each researcher keeps a dictionary of the information they have received from the other researchers.
     set data_from_other_researchers table:make
+
+    ; In the beginning, the dictionary is filled with the fact that all the other researchers are agnostic.
+    ; this will be overridden as research is conducted and communication takes place
     let d data_from_other_researchers
     ask other researchers [
-      ifelse take_only_binary_info_from_colleagues [
+      ifelse take_only_binary_info_from_colleagues [ ;the format depends on whether we only exchange binary opinions or lists of the collected data
         table:put d who [1 0.5] ; Initially, each researcher has trustworthyness 1 and credence .5 in the question
       ]
       [
@@ -71,66 +80,94 @@ to setup
 
 
   create-research_areas 1 [
+    ; the value of the question is a random number between 0 and 1, unless the switch for manually determining the difficulty is on
     set value random-float 1
-    if hard_research_question [set value 0.48]
+    ifelse manually_set_difficulty [set_difficulty] [set value random-float 1.0]
+
+    ; the global pointer question is set to point at the research question
     set question self
+
+    ; the research question turtle should be invisible
     set color white
   ]
 
   layout-circle research_areas 5
 
-;  ask researchers [
-;    create-credences-with research_areas
-;  ]
 
   ask professional_connections [
     set color 67
   ]
 
-;  ask credences [
-;    set color 87
-;  ]
-
-
-
-;  ask credences [
-;    ; each researcher starts out agnostic about each research question, i.e. the credence is .5
-;    set c 0.5
-;  ]
-
-;  ask research_areas [
-;    ; set the true value of the question investigated in each research area
-;    set value (random-float 1)
-;
-;    ; assign 'researchers_per_area' many researchers to each area
-;    ask n-of researchers_per_area (researchers with [speciality = 0]) [
-;      set speciality myself
-;    ]
-;  ]
-
-;  ask researchers [
-;    hatch-dicts 1 [
-;      set entries []
-;    ]
-;    set data_from_other_researchers (other turtles-here)
-;  ]
 
 
 end
 
 to go
   ask researchers [
+
+    ; Each iteration consists of three phases, starting with conducting and reporting research...
     report_research
 
+
+    ; ... followed by the fraud detection phase...
     fraud_detection
 
+
+    ;... and concluding with each researcher communicating with the others and updating their credence
     update_credences
 
   ]
+
+
+  ; After each iteration, convergence of the three metrics we use is checked
+  check_convergence
+
   tick
 end
 
+to check_convergence
+
+
+  ; All three work in the same way: If the metric is fulfilled, add the current tick to the corresponding list
+  ; if the metric is not fulfilled, reset the corresponding list to the empty list
+  ; if the list of a certain metric reaches the length of 500, then the first tick in the list
+  ; will have been the tick at which lasting convergence was reached.
+
+
+  ifelse avg_dist_from_truth_very_small and (ticks > 0) [
+    set close_to_truth (lput ticks close_to_truth)
+  ] [set close_to_truth []]
+
+  ifelse eighty_percent_true_opinion and (ticks > 0)[
+    set majority_convergence (lput ticks majority_convergence)
+  ] [set majority_convergence []]
+
+   ifelse hundred_percent_true_opinion and (ticks > 0)[
+    set complete_convergence (lput ticks complete_convergence)
+  ] [set complete_convergence []]
+
+  if (length close_to_truth = 500)[print (word "It took " (item 0 close_to_truth) " iterations to come close to the truth")]
+  if (length complete_convergence = 500)[print (word "It took " (item 0 complete_convergence) " iterations to  completely converge on the truth.")]
+  if (length majority_convergence = 500) [print (word "It took " (item 0 majority_convergence) " iterations for 80% of researchers to adopt the correct binary opinion")]
+end
+
+to set_difficulty
+  ; should be called by a resarch area
+  ; the question's value will be set closer to .5 if difficulty is higher
+  if (difficulty_of_research_question = "easy") [set value .15]
+  if (difficulty_of_research_question = "difficult") [set value .4]
+  if (difficulty_of_research_question = "very difficult") [set value .47]
+  if (difficulty_of_research_question = "extremely difficult") [set value .49]
+
+end
+
+
+
 to report_research
+  ; should be called by a researcher
+  ; simulates the conducting of an experiment and recording the result to the researcher's own
+  ; "reported_results" list attribute
+
   let experimental_result get_experimental_result question
   ifelse open_to_fraud
   [ ; the scenario where the researcher is open to committing fraud:
@@ -150,17 +187,39 @@ to report_research
 end
 
 
+to-report get_experimental_result [res_area]
+  ; this function simulates conducting an experiment in the research area 'res_area'
+
+  ; first, we determine the true answer to the question inverstigated in 'res_area
+  let v ([value] of res_area)
+
+  ; the experimental result will not be the exactly true number, but instead there will be some Gaussian noise
+  ; (to be set with the 'noise_in_experiments'slider in the interface
+  let noise random-normal 0 noise_in_experiments
+
+  ; The result the researcher gets is the combination of the truth with the noise
+  let result (v + noise)
+  report result
+end
+
+
+
 to-report form_binary_opinion [rep_results]
   ; this function should take in a list of reported results on a given question, and return a binary opinion on whether the question being investigated is to be answered affirmatively or negatively
   ; there are different ways that this can be realized. In the first iteration, I implement a simple averaging of the results and then a cutoff point at .5: if the average result is higher than .5,
   ; the researcher will conclude that the question is to be answered affirmatively
   ; an alternative would be to implement significance tests.
+
   if (length rep_results) = 0 [report .5] ; if the researcher does not have any data, they are agnostic, i.e. .5
   report round (mean rep_results)
 end
 
 
 to fraud_detection
+  ; should be called by a researcher
+  ; simulates the risk of getting caught for your frauds
+
+
   ifelse number_of_frauds_committed = 0 [
     ; if no frauds have been committed, do nothing
   ]
@@ -180,64 +239,149 @@ end
 
 
 to update_credences
-
+  ; should be called by a researcher
+  ; depending on which testimonial norm is in use, communicate and update credence in accordance with that rule
 
   if Testimonial_Norm = "Reidian" [reidian_updating]
   if Testimonial_Norm = "Majoritarian Reidian" [majoritarian_reidian_updating]
-  if Testimonial_Norm = "E-Truster" [e_trusting]
-  if Testimonial_Norm = "Majoritarian E-Truster" [majoritarian_e_trusting]
-  if Testimonial_Norm = "Proximist" [proximist]
-  if Testimonial_Norm = "Majoritarian Proximist" [majoritarian_proximist]
+;  if Testimonial_Norm = "E-Truster" [e_trusting]
+;  if Testimonial_Norm = "Majoritarian E-Truster" [majoritarian_e_trusting]
+;  if Testimonial_Norm = "Proximist" [proximist]
+;  if Testimonial_Norm = "Majoritarian Proximist" [majoritarian_proximist]
 
 
 end
 
 
-to-report get_experimental_result [res_area]
-  ; this function simulates conducting an experiment in the research area 'res_area'
-
-  ; first, we determine the true answer to the question inverstigated in 'res_area
-  let v ([value] of res_area)
-
-  ; the experimental result will not be the exactly true number, but instead there will be some Gaussian noise
-  ; (to be set with the 'noise_in_experiments'slider in the interface
-  let noise random-normal 0 noise_in_experiments
-
-  ; The result the researcher gets is the combination of the truth with the noise
-  let result (v + noise)
-  report result
-end
 
 
 to reidian_updating
+  ; should be called by a researcher
   ; update credence about the research question by collecting the opinion/data of a random neighbor
 
+
+  ; set d to be a pointer to the researchers dictionary for data from other researchers
   let d data_from_other_researchers
 
   ifelse take_only_binary_info_from_colleagues [
-    ask one-of in-professional_connection-neighbors [
+    ask one-of in-professional_connection-neighbors [ ; select a random neighbor the researcher is connected to professionally
+
+      ; get their binary opinion on the research question
       let binary_opinion form_binary_opinion reported_results
+
+      ; get their trustworthiness
       let trustworthyness get_trustworthyness
+
+
+      ; enter both the trustworthiness of the person you talked to and the data they gave you into your dictionary
       table:put d who (list trustworthyness binary_opinion)
     ]
   ]
   [
     ask one-of in-professional_connection-neighbors [
+
+      ; get their data
       let data reported_results
+
+      ; get their trustworthiness
       let trustworthyness get_trustworthyness
+
+      ; enter both the trustworthiness of the person you talked to and the data they gave you into your dictionary
       table:put d who (list trustworthyness data)
     ]
   ]
 
+
+  ; form a new opinion on the research question
   form_opinion_non_majoritarian_updating
 
 end
 
+
+to form_opinion_non_majoritarian_updating
+  ; should be called by a researcher, usually after they have gathered data
+  ; should only be called if we are not using a "Majoritarian" testimonial norm
+
+  ; we will do a weighted sum of all the data the agent has access to
+  ; where the weights will be the trustworthinesses of the people they got the data from
+  let total_weights 0
+  let sum_data 0
+  let result "None"
+
+
+
+  ifelse take_only_binary_info_from_colleagues [
+    foreach table:to-list data_from_other_researchers  [ ; this is the data from other researchers
+      x -> let data (item 1 x)
+
+      ; item 0 of data is the trustworthiness score. This serves as the weight
+      let w (item 0 data)
+      set total_weights (total_weights + w)
+
+      ; item 1 of data is the (binary) opinion of the agent
+      set sum_data (sum_data + w * (item 1 data))
+    ]
+
+    ; we are done with summing the data we have from other researchers. now we add our own data.
+    ; a researcher's trust in their own results never sinks too low
+    let w max list get_trustworthyness ((count researchers) / (max list ticks 1))
+
+
+    foreach reported_results [ ; this is the researcher's own data
+      z -> set total_weights (total_weights + w)
+      set sum_data (sum_data + w * z)
+    ]
+
+    ; the result is obtained by dividing the sum of the data by the sum of the weights
+    set result (sum_data / total_weights)
+  ]
+  [
+
+    ; this is the case where we do not get only binary data from other researchers
+    foreach table:to-list data_from_other_researchers [ ; this is the data from other researchers
+
+
+      x -> let data (item 1 x)
+
+      ; item 0 of data is the trustworthiness score. This serves as the weight
+      let weight (item 0 data)
+
+      ; item 1 of data is the data we got from the agent in question. it is a list of results.
+      foreach (item 1 data) [
+        y -> set total_weights (total_weights + weight)
+        set sum_data (sum_data + weight * y)
+      ]
+    ]
+
+    ; we are done with summing the data we have from other researchers. now we add our own data.
+    let w get_trustworthyness
+    foreach reported_results [ ; this is the researcher's own data
+      z -> set total_weights (total_weights + w)
+      set sum_data (sum_data + w * z)
+    ]
+
+    ; the result is obtained by dividing the sum of the data by the sum of the weights
+    set result (sum_data / total_weights)
+  ]
+
+  ; update the agent's credence attribute
+  set credence result
+
+end
+
 to majoritarian_reidian_updating
+  ; should be called by a researcher
+  ; update credence about the research question by collecting the opinions of all neighbors and pooling them
+  ; only makes sense if take_only_binary_info_from_colleagues is true
+
+
+
   ifelse not take_only_binary_info_from_colleagues [print "Majoritarian Reidian updatig only makes sense if you take binary info"]
   [
+
     let avg 0
     let total_weights 0
+
     ask in-professional_connection-neighbors [ ; get the opinions of the researchers in your network
       let w get_trustworthyness
       set total_weights (total_weights + w)
@@ -246,7 +390,7 @@ to majoritarian_reidian_updating
 
 
     ; also take your own opinion into account
-    let w get_trustworthyness
+    let w max list get_trustworthyness ((count researchers) / (max list ticks 1)) ; a researcher's trust in their own results never sinks too low
     foreach reported_results [ ; this is the researcher's own data
       z -> set total_weights (total_weights + w)
       set avg (avg + w * z)
@@ -257,105 +401,68 @@ to majoritarian_reidian_updating
   ]
 end
 
-to e_trusting
-
-end
-
-
-to majoritarian_e_trusting
-
-end
-
-
-
-to proximist
-
-end
-
-
-
-to majoritarian_proximist
-
-end
+;to e_trusting
+;
+;end
+;
+;
+;to majoritarian_e_trusting
+;
+;end
+;
+;
+;
+;to proximist
+;
+;end
+;
+;
+;
+;to majoritarian_proximist
+;
+;end
 
 
 to-report get_trustworthyness
+  ; should be called by a researcher
+  ; reports their trustworhtiness-score
+  ; depending on which fraud-related norm is in play
+
+
+  ; If the ostrich norm is used, every researcher always keeps full credibility
   if Fraud_Related_Norm = "Ostrich"[report 1]
+
+
+  ; If the Discounter norm is used, a researcher who has not yet been discovered to have cheated has trustworthiness 1
+  ; and a researcher who has been found to commit fraud some times receives a trustworthiness score
+  ; that depends on the parameter "fraud_discount_factor"and the frequency they have been found to cheat
+
   if Fraud_Related_Norm = "Discounter" [
     if number_of_frauds_detected  = 0 [report 1]
 
-    let trustworthyness (fraud_discount_factor * (ticks / number_of_frauds_detected))
-    report trustworthyness
+    let fraud_factor (fraud_discount_factor * (number_of_frauds_detected / (max list 1 ticks)))
+    let trustworthyness 1 - fraud_factor
+
+    ; trustworthiness can never fall below 0
+    report max (list trustworthyness 0)
   ]
+
+
+  ; If the Eliminator norm is used, any researcher who has committed at least one fraud
+  ; is completely distrusted and has trustworthiness 0
+  ; any researcher that has never been discovered to have cheated keeps full trustworthiness of 1
   if Fraud_Related_Norm = "Rigorous Eliminator" [
     ifelse (number_of_frauds_detected  = 0) [report 1] [report 0]
   ]
-end
-
-
-to form_opinion_non_majoritarian_updating
-  let total_weights 0
-  let sum_data 0
-
-  ifelse take_only_binary_info_from_colleagues [
-    foreach table:to-list data_from_other_researchers  [ ; this is the data from other researchers
-      x -> let data (item 1 x)
-      let w (item 0 data)
-      set total_weights (total_weights + w)
-      set sum_data (sum_data + w * (item 1 data))
-    ]
-    let w get_trustworthyness
-    foreach reported_results [ ; this is the researcher's own data
-      z -> set total_weights (total_weights + w)
-      set sum_data (sum_data + w * z)
-    ]
+  if Fraud_Related_Norm = "Omniscient Discounter"[
+    ifelse open_to_fraud [report 1 - fraud_discount_factor] [report 1]
   ]
-  [
-    foreach table:to-list data_from_other_researchers [ ; this is the data from other researchers
-      x -> let data (item 1 x)
-      let weight (item 0 data)
-      foreach (item 1 data) [
-        y -> set total_weights (total_weights + weight)
-        set sum_data (sum_data + weight * y)
-      ]
-    ]
-    let w get_trustworthyness
-    foreach reported_results [ ; this is the researcher's own data
-      z -> set total_weights (total_weights + w)
-      set sum_data (sum_data + w * z)
-    ]
-  ]
-
-
-
-  let result (sum_data / total_weights)
-
-  set credence result
-
 end
 
 
 
-;to set_credence [subject_ new_credence]
-;  ; sets the credence about "subject_" to "new_credence"
-;  ask in-credence-from subject_ [
-;    set c new_credence
-;  ]
-;end
 
-;to-report get_credence [resrchr subject_]
-;  ; reports the credence in about "subject_" for the calling turtle
-;  let cred "None"
-;  ask subject_ [
-;    ask in-credence-from resrchr [
-;      set cred c
-;    ]
-;  ]
-;;  ask in-credence-from subject_ [
-;;    set cred c
-;;  ]
-;  report cred
-;end
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -363,33 +470,51 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report number_of_reserachers_with_correct_binary_opinion
+  ; If the research question hasn't been initialized yet, no researcher has the correct opinion
+  if (question = 0) [report 0]
+
   let correct round([value] of question)
   let i 0
+
+  ; If no researcher has been initialized, no researcher has the correct opinion
+  ifelse ((count researchers) = 0) [report 0] [
+
   ask researchers with [credence != .5] [
     if round(credence) = correct [set i (i + 1)]
   ]
-  report i
+    report i]
 end
 
 
 to-report average_credence
+  ; what is the average opinion of all researchers
+
 
   let l []
   ask researchers [
     set l (lput credence l)
   ]
-
-  let average mean l
+  let average .5
+  ifelse ((length l) = 0) [set average .5] [set average mean l]
 
   report average
 end
 
 
 to-report average_distance_from_truth
+  ; what is the distance between the truth and the average opinion of all researchers
+
   report abs (average_credence - true_value)
 end
 
+
 to-report true_value
+  ; what is the true value of the research question
+
+
+  ; If the research question hasn't been initialized yet, technically there is no true value; but
+  ; we set it to .5 to represent agnosticism.
+  if (question = 0) [report 0.5]
   let truth 0
   ask question [set truth value]
   report truth
@@ -397,6 +522,8 @@ end
 
 
 to-report trust_in_fraudsters
+  ; what is the sum over all fraudsters of the trustworthiness they are thought to have
+
   let i 0
   ask researchers with [open_to_fraud] [
     set i (i + get_trustworthyness)
@@ -406,6 +533,9 @@ end
 
 
 to-report eighty_percent_true_opinion
+  ; do at least 80% of researchers hold the correct binary opinion
+
+
   let i count researchers
   let k number_of_reserachers_with_correct_binary_opinion
 
@@ -413,73 +543,26 @@ to-report eighty_percent_true_opinion
   report r
 end
 
+
+to-report hundred_percent_true_opinion
+  ; do all researchers hold the correct opinion
+
+  let r (number_of_reserachers_with_correct_binary_opinion = (count researchers))
+  report r
+end
+
+
 to-report avg_dist_from_truth_very_small
+  ; is the distance between the average opinion of all researchers and the truth smaller than the given tolerance
+
   report average_distance_from_truth < tolerance
 end
 
-;;;;;;;;;;;;;;;;;;;;;;
-; dictionary functionality
-;;;;;;;;;;;;;;;;;;;;;;
-
-
-
-to-report create_dict
-  ; returns a new (empty) dictionary
-
-
-  let res "None"
-  create-dicts 1 [
-    set entries []
-    set res self
-  ]
-  report res
-end
-
-
-to enter_value [d k v]
-  ; enters the value v for the key k into the dictionary d
-
-
-
-  let entr "None"
-  create-dict_entries 1 [
-    set entr self
-    set key k
-    set value v
-    set color white
-  ]
-
-  ifelse ((retrieve_value d k) = "None") [
-    ; if the key is not yet occupied, add it
-  ask d [
-    set entries (lput entr entries)
-  ]
-  ]
-  [
-    ; if there already is a value for the key, replace that value
-    ask d [
-    foreach entries [
-        x -> ask x [if key = k [set value v]]
-    ]
-  ]
-  ]
-
-end
-
-
-to-report retrieve_value [d k]
-  ; Retrive the value for the key k in dictionary d
-  let res "None"
-  let entrs ([entries] of d)
-  foreach entrs [
-    x -> (if (([key] of x) = k) [set res ([value] of x)])
-  ]
-  report res
-end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; code for creating network structures
-; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus" provided on his website http://www.kevinzollman.com/papers.html
+; taken from the code for  Kevin Zollman's paper "Social Network Structure and the Achievement of Consensus"
+; provided on his website http://www.kevinzollman.com/papers.html
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to link-n
@@ -508,7 +591,7 @@ to cycle
 end
 
 to wheel
-  ask researcher 0 [create-professional_connections-with other researchers]
+  ask researcher 0 [create-professional_connections-with other researchers setxy 0 0]
 
   let n 1
   while [n < count researchers] [
@@ -524,88 +607,8 @@ to complete
   layout-circle researchers 15
 end
 
-;to alpha-ring
-;  set degree 2
-;  cycle
-;  let tl turtles
-;  while [ count links < (( degree * number_of_agents ) / 2 ) ] [
-;    if not any? tl  [
-;      set tl turtles
-;    ]
-;
-;    let t one-of tl
-;    set tl tl with [self != t]
-;    ask t [
-;
-;      ;; calculate Rij for each node
-;
-;      let n 0
-;      let R n-values count turtles [0]
-;      while [n < count turtles] [
-;        if turtle n != self [
-;          if not link-neighbor? turtle n [
-;
-;            ;; count the common neighbors
-;            let m count link-neighbors with [link-neighbor? myself]
-;            if m >= degree [
-;              set R replace-item n R 1
-;            ]
-;            if degree > m and m >= 0 [
-;              set R replace-item n R ( ( m / degree ) ^ alpha )
-;            ]
-;            if m = 0 [
-;              set R replace-item n R alpha-p
-;            ]
-;          ]
-;        ]
-;        set n n + 1
-;      ]
-;
-;
-;      ;; normalize Rij
-;
-;      let D sum R
-;      let P map [ ? / D ] R
-;
-;      ;; connect
-;
-;      let rand random-float 1
-;      let total item 0 P
-;      set n 0
-;      while [total < rand] [
-;        set n n + 1
-;        set total total + item n P
-;      ]
-;
-;      create-link-with turtle n
-;
-;    ]
-;  ]
-;
-;end
-;
 
-;to beta-ring
-;  cycle
-;
-;  ask links [
-;    if (random-float 1) < beta
-;    [
-;      let node1 end1
-;      if [count link-neighbors ] of end1 < (number_of_agents - 1)
-;      [
-;        let node2 one-of turtles with [ (self != node1) and (not link-neighbor? node1)]
-;        ask node1 [create-link-with node2]
-;        die
-;      ]
-;    ]
-;  ]
-;
-;end
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Clustering computations ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Clustering computations
 
 to-report in-neighborhood? [ hood ]
   report ( member? end1 hood and member? end2 hood )
@@ -637,10 +640,10 @@ to find-clustering-coefficient
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-834
-30
-1271
-468
+885
+37
+1322
+475
 -1
 -1
 13.0
@@ -687,7 +690,7 @@ researchers_per_area
 researchers_per_area
 0
 100
-20.0
+25.0
 1
 1
 NIL
@@ -702,17 +705,17 @@ degree
 degree
 0
 100
-4.0
+2.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
+71
+37
+137
 70
-59
-136
-92
 NIL
 setup
 NIL
@@ -726,10 +729,10 @@ NIL
 1
 
 BUTTON
-136
-59
-199
-92
+137
+37
+200
+70
 NIL
 go
 T
@@ -751,7 +754,7 @@ noise_in_experiments
 noise_in_experiments
 0
 1
-0.4
+0.5
 0.05
 1
 NIL
@@ -766,7 +769,7 @@ highest_possible_fraud_propensity
 highest_possible_fraud_propensity
 0
 1
-0.7
+0.5
 .05
 1
 NIL
@@ -781,7 +784,7 @@ share_of_fraudulent_scientists
 share_of_fraudulent_scientists
 0
 1
-0.0
+0.4
 .05
 1
 NIL
@@ -810,18 +813,18 @@ SLIDER
 fraud_discount_factor
 fraud_discount_factor
 0
-1
-0.3
-.05
+10
+2.0
+.5
 1
 NIL
 HORIZONTAL
 
 SWITCH
 69
-269
+301
 344
-302
+334
 take_only_binary_info_from_colleagues
 take_only_binary_info_from_colleagues
 0
@@ -829,11 +832,11 @@ take_only_binary_info_from_colleagues
 -1000
 
 PLOT
-488
-89
-831
-239
-number_of_reserachers_with_correct_binary_opinion
+543
+88
+886
+238
+Number of researchers with correct binary opinion
 ticks
 researchers
 0.0
@@ -847,9 +850,9 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot number_of_reserachers_with_correct_binary_opinion"
 
 PLOT
-488
+542
 238
-831
+885
 388
 average credence vs truth
 ticks
@@ -866,21 +869,21 @@ PENS
 "pen-1" 1.0 0 -13840069 true "" "plot true_value"
 
 SWITCH
-69
-301
-344
-334
-hard_research_question
-hard_research_question
+66
+251
+238
+284
+manually_set_difficulty
+manually_set_difficulty
 0
 1
 -1000
 
 PLOT
-489
-388
-831
-538
+544
+386
+886
+536
 average distance from truth
 ticks
 distance
@@ -895,43 +898,43 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot average_distance_from_truth"
 
 MONITOR
-489
-539
-658
-584
-NIL
+544
+537
+713
+582
+Avg distance from truth
 average_distance_from_truth
 17
 1
 11
 
 MONITOR
-659
-539
-832
-584
-NIL
+714
+536
+887
+581
+C. trust in fraudsters
 trust_in_fraudsters
 17
 1
 11
 
 MONITOR
-674
-584
-849
-629
-NIL
+714
+580
+887
+625
+80% correct opinions
 eighty_percent_true_opinion
 17
 1
 11
 
 INPUTBOX
-373
-566
-489
-626
+428
+581
+544
+641
 tolerance
 0.1
 1
@@ -939,21 +942,21 @@ tolerance
 Number
 
 MONITOR
-489
-582
-674
-627
-NIL
+544
+580
+713
+625
+Avg opinion close to truth
 avg_dist_from_truth_very_small
 17
 1
 11
 
 PLOT
-852
-484
-1052
-634
+886
+475
+1086
+625
 Cumulative trust in fraudsters
 NIL
 NIL
@@ -968,34 +971,64 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot trust_in_fraudsters"
 
 CHOOSER
-68
-106
-239
-151
+69
+84
+240
+129
 Testimonial_Norm
 Testimonial_Norm
 "Reidian" "Majoritarian Reidian"
 0
 
 CHOOSER
-68
-150
-239
-195
+69
+128
+259
+173
 Fraud_Related_Norm
 Fraud_Related_Norm
-"Ostrich" "Discounter" "Rigorous Eliminator"
-0
+"Ostrich" "Discounter" "Rigorous Eliminator" "Omniscient Discounter"
+2
 
 CHOOSER
-68
-194
-206
-239
+69
+172
+207
+217
 Network
 Network
 "Complete" "Cycle" "Wheel"
+1
+
+CHOOSER
+238
+251
+458
+296
+difficulty_of_research_question
+difficulty_of_research_question
+"easy" "difficult" "very difficult" "extremely difficult"
 0
+
+TEXTBOX
+241
+238
+485
+266
+only relevant if \"manually set difficulty\" is on
+11
+0.0
+1
+
+TEXTBOX
+73
+592
+348
+648
+should always be 1. Future work might extend the model to allow for multiple research areas.
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
